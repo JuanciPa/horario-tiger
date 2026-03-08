@@ -200,8 +200,13 @@
     </main>
 
     <script>
-        // TU URL DE GOOGLE APPS SCRIPT
+        // PON AQUÍ TU URL DE GOOGLE APPS SCRIPT
         const API_URL = "https://script.google.com/macros/s/AKfycbyTHlpHADT_witr9VQhceIrP6HWOsF3dEpdPHYxCmJbSmaOQYbTB0HXMGqZ4o6HHfNXpQ/exec";
+
+        // Función para sacar la fecha de hoy (Ej: 8/3/2026)
+        const getTodayString = () => {
+            return new Date().toLocaleDateString('es-ES');
+        };
 
         const scheduleData = [
             // LUNES
@@ -269,16 +274,21 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             const taskListElement = document.getElementById('taskList');
-            // Mensaje mientras se descargan los datos
             taskListElement.innerHTML = '<li class="p-8 text-center text-stone-500 flex flex-col items-center gap-3"><span class="text-3xl animate-spin">⏳</span><span>Sincronizando con Google Sheets...</span></li>';
 
-            // Descargar estado desde Google Sheets
+            const todayStr = getTodayString();
+
             fetch(API_URL)
                 .then(response => response.json())
                 .then(savedData => {
                     scheduleData.forEach(task => {
-                        if (savedData[task.id] !== undefined) {
-                            task.completed = savedData[task.id];
+                        // Buscamos si la tarea se ha hecho HOY específicamente
+                        const key = task.id + "_" + todayStr;
+                        if (savedData[key] !== undefined) {
+                            task.completed = savedData[key];
+                        } else {
+                            // Si no hay registro de HOY, la tarea empieza en FALSO
+                            task.completed = false; 
                         }
                     });
                     
@@ -294,7 +304,6 @@
                     }, 2000);
                 });
             
-            // Event Listeners for Filters
             document.getElementById('dayFilter').addEventListener('change', renderTaskList);
             document.getElementById('categoryFilter').addEventListener('change', renderTaskList);
         });
@@ -366,18 +375,16 @@
         function toggleTask(id) {
             const taskIndex = scheduleData.findIndex(t => t.id === id);
             if (taskIndex > -1) {
-                // Actualiza visualmente de inmediato
                 scheduleData[taskIndex].completed = !scheduleData[taskIndex].completed;
                 
-                // Extraemos todos los datos de esa tarea concreta
                 const isCompleted = scheduleData[taskIndex].completed;
                 const taskDay = scheduleData[taskIndex].day;
                 const taskName = scheduleData[taskIndex].task;
                 const taskCat = scheduleData[taskIndex].category;
+                const todayStr = getTodayString(); // Sacamos el día exacto
                 
                 renderTaskList(); 
 
-                // Enviamos TODOS los datos a Google Sheets
                 fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -386,29 +393,26 @@
                         completed: isCompleted,
                         day: taskDay,
                         task: taskName,
-                        category: taskCat
+                        category: taskCat,
+                        fecha: todayStr // Lo enviamos a Google Sheets
                     })
                 })
                 .then(response => response.json())
-                .then(data => console.log("¡Tarea guardada con detalles en Excel!", data))
+                .then(data => console.log("Tarea de hoy guardada", data))
                 .catch(error => console.error("Error al guardar:", error));
             }
         }
 
         function updateProgressBar() {
             const dayFilterVal = document.getElementById('dayFilter').value;
-            
             const relevantTasks = scheduleData.filter(task => {
                 return dayFilterVal === 'Todos' || task.day === dayFilterVal;
             });
-
             const total = relevantTasks.length;
             const completed = relevantTasks.filter(t => t.completed).length;
             const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
-
             const progressBar = document.getElementById('global-progress-bar');
             const progressText = document.getElementById('global-progress-text');
-
             progressBar.style.width = `${percentage}%`;
             
             if(dayFilterVal === 'Todos') {
@@ -431,11 +435,9 @@
             scheduleData.forEach(task => {
                 categories[task.category] = (categories[task.category] || 0) + 1;
             });
-
             const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
             const fijosPerDay = Array(7).fill(0);
             const flexiblesPerDay = Array(7).fill(0);
-
             scheduleData.forEach(task => {
                 const dayIndex = days.indexOf(task.day);
                 if (dayIndex !== -1) {
@@ -443,35 +445,16 @@
                     else flexiblesPerDay[dayIndex]++;
                 }
             });
-
             const commonOptions = {
                 responsive: true,
                 maintainAspectRatio: false, 
                 plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { font: { family: "'Segoe UI', sans-serif" }, padding: 20 }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(41, 37, 36, 0.9)', 
-                        titleFont: { size: 14, family: "'Segoe UI', sans-serif" },
-                        bodyFont: { size: 13, family: "'Segoe UI', sans-serif" },
-                        padding: 12,
-                        cornerRadius: 8,
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) { label += ': '; }
-                                if (context.parsed.y !== null) { label += context.parsed.y; }
-                                else { label += context.parsed; }
-                                return label + ' tareas';
-                            }
-                        }
-                    }
+                    legend: { position: 'bottom', labels: { font: { family: "'Segoe UI', sans-serif" }, padding: 20 } },
+                    tooltip: { backgroundColor: 'rgba(41, 37, 36, 0.9)', titleFont: { size: 14 }, bodyFont: { size: 13 }, padding: 12, cornerRadius: 8 }
                 }
             };
-
             const ctxCat = document.getElementById('categoryChart').getContext('2d');
+            if(chartCategoryInstance) chartCategoryInstance.destroy();
             chartCategoryInstance = new Chart(ctxCat, {
                 type: 'doughnut',
                 data: {
@@ -479,18 +462,13 @@
                     datasets: [{
                         data: Object.values(categories),
                         backgroundColor: ['#f97316', '#3b82f6', '#10b981', '#eab308'],
-                        borderWidth: 2,
-                        borderColor: '#ffffff',
-                        hoverOffset: 4
+                        borderWidth: 2, borderColor: '#ffffff', hoverOffset: 4
                     }]
                 },
-                options: {
-                    ...commonOptions,
-                    cutout: '65%'
-                }
+                options: { ...commonOptions, cutout: '65%' }
             });
-
             const ctxDay = document.getElementById('dayChart').getContext('2d');
+            if(chartDayInstance) chartDayInstance.destroy();
             chartDayInstance = new Chart(ctxDay, {
                 type: 'bar',
                 data: {
