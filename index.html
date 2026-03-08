@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Panel de Rutina y Horario Semanal</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #fafaf9; 
+            color: #292524; 
+            overflow-x: hidden;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        .custom-checkbox {
+            appearance: none;
+            background-color: #fff;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.5em;
+            height: 1.5em;
+            border: 2px solid #a8a29e;
+            border-radius: 0.25em;
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .custom-checkbox::before {
+            content: "✓";
+            font-size: 1.2em;
+            color: white;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em var(--form-control-color);
+        }
+
+        .custom-checkbox:checked {
+            background-color: #10b981; 
+            border-color: #10b981;
+        }
+
+        .custom-checkbox:checked::before {
+            transform: scale(1);
+        }
+
+        .task-flexible {
+            border-left: 4px solid #f97316; 
+        }
+        
+        .task-fijo {
+            border-left: 4px solid #3b82f6; 
+        }
+
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen pb-12">
+
+    <header class="bg-white border-b border-stone-200 sticky top-0 z-50 card-shadow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-stone-800 tracking-tight">Panel de Control: Horario Semanal</h1>
+                <p class="text-sm text-stone-500 mt-1">Organización interactiva de Estudios, Limpieza y Cuidados de Tiger</p>
+            </div>
+            
+            <div class="w-full sm:w-64 bg-stone-100 rounded-full h-6 relative overflow-hidden border border-stone-200">
+                <div id="global-progress-bar" class="bg-emerald-500 h-6 transition-all duration-500 ease-out" style="width: 0%;"></div>
+                <div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-stone-800 mix-blend-difference" style="color: white;">
+                    <span id="global-progress-text">0% Completado Hoy</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-12">
+
+        <section class="bg-white p-6 rounded-xl card-shadow border border-stone-100">
+            <h2 class="text-xl font-semibold mb-3 text-stone-800 border-b border-stone-200 pb-2">Sobre este Dashboard</h2>
+            <p class="text-stone-600 leading-relaxed">
+                Este panel interactivo transforma el documento PDF original de tu horario en una herramienta dinámica. Las tareas se dividen en <strong>"Fijas"</strong> (horarios estrictos, línea azul) y <strong>"Flexibles"</strong> (línea naranja). Los datos que marques se guardarán automáticamente en tu hoja de Google Sheets.
+            </p>
+        </section>
+
+        <section>
+            <div class="mb-4">
+                <h2 class="text-2xl font-semibold text-stone-800">Análisis de Rutina</h2>
+                <p class="text-stone-500 text-sm mt-1">
+                    Esta sección visualiza la estructura general de tu semana basándose en los datos del reporte.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white p-6 rounded-xl card-shadow border border-stone-100 flex flex-col">
+                    <h3 class="text-lg font-medium text-stone-800 mb-2 text-center">Distribución de Tareas por Categoría</h3>
+                    <div class="chart-container flex-grow">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl card-shadow border border-stone-100 flex flex-col">
+                    <h3 class="text-lg font-medium text-stone-800 mb-2 text-center">Volumen de Tareas por Día</h3>
+                    <div class="chart-container flex-grow">
+                        <canvas id="dayChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="checklist-section" class="scroll-mt-24">
+            <div class="mb-6">
+                <h2 class="text-2xl font-semibold text-stone-800 flex items-center gap-2">
+                    <span class="text-2xl">📋</span> Panel de Acción Dinámico
+                </h2>
+                <p class="text-stone-500 text-sm mt-1">
+                    Filtra la lista y marca tus progresos.
+                </p>
+            </div>
+
+            <div class="bg-white rounded-xl card-shadow border border-stone-100 overflow-hidden">
+                
+                <div class="bg-stone-50 border-b border-stone-200 p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                    <div class="flex flex-wrap gap-3 w-full sm:w-auto">
+                        <div class="flex flex-col">
+                            <label for="dayFilter" class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Día</label>
+                            <select id="dayFilter" class="bg-white border border-stone-300 text-stone-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none transition-shadow">
+                                <option value="Todos">Toda la Semana</option>
+                                <option value="Lunes" selected>Lunes</option>
+                                <option value="Martes">Martes</option>
+                                <option value="Miércoles">Miércoles</option>
+                                <option value="Jueves">Jueves</option>
+                                <option value="Viernes">Viernes</option>
+                                <option value="Sábado">Sábado</option>
+                                <option value="Domingo">Domingo</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col">
+                            <label for="categoryFilter" class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">Categoría</label>
+                            <select id="categoryFilter" class="bg-white border border-stone-300 text-stone-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none transition-shadow">
+                                <option value="Todas">Todas</option>
+                                <option value="Mascota">Mascota (Tiger)</option>
+                                <option value="Estudios">Estudios / Trabajo</option>
+                                <option value="Limpieza">Limpieza Casa</option>
+                                <option value="Comida">Comidas</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4 text-sm font-medium">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                            <span class="text-stone-600">Fijas</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded-full bg-orange-500"></div>
+                            <span class="text-stone-600">Flexibles</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-0 sm:p-4">
+                    <ul id="taskList" class="flex flex-col gap-2">
+                        </ul>
+                    
+                    <div id="emptyState" class="hidden text-center py-12">
+                        <div class="text-4xl mb-3">☕</div>
+                        <h3 class="text-lg font-medium text-stone-800">No hay tareas para estos filtros</h3>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // TU URL DE GOOGLE APPS SCRIPT
+        const API_URL = "https://script.google.com/macros/s/AKfycbyTHlpHADT_witr9VQhceIrP6HWOsF3dEpdPHYxCmJbSmaOQYbTB0HXMGqZ4o6HHfNXpQ/exec";
+
+        const scheduleData = [
+            // LUNES
+            { id: 1, day: 'Lunes', time: '07:00', task: 'Comida y bebida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina/Salón' },
+            { id: 2, day: 'Lunes', time: '08:00 - 09:00', task: 'Desayunar', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 3, day: 'Lunes', time: '09:00 - 13:00', task: 'Estudiar / Redes / Seguridad', category: 'Estudios', type: 'Fijo', completed: false, location: 'Escritorio' },
+            { id: 4, day: 'Lunes', time: '10:00 - 11:00', task: 'Hacer la cama', category: 'Limpieza', type: 'Fijo', completed: false, location: 'Habitación' },
+            { id: 5, day: 'Lunes', time: '10:00 - 11:00', task: 'Limpiar ventana, espejo y escritorio', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Habitación' },
+            { id: 6, day: 'Lunes', time: '11:00 - 12:00', task: 'Limpiar bañera, cisterna y váter', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Baño' },
+            { id: 7, day: 'Lunes', time: '12:30 - 13:30', task: 'Hacer la comida', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 8, day: 'Lunes', time: '14:00 - 15:00', task: 'Comida y limpieza cacharros', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 9, day: 'Lunes', time: '14:00 - 15:00', task: 'Limpiar arenero y suelo', category: 'Mascota', type: 'Flexible', completed: false, location: 'Salón' },
+            { id: 10, day: 'Lunes', time: 'Flexible', task: 'Limpiar estanterías, mesa y sillas', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Salón' },
+            { id: 11, day: 'Lunes', time: '21:30 - 22:30', task: 'Comida y bebida (Noche)', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            
+            // MARTES
+            { id: 12, day: 'Martes', time: '07:00', task: 'Comida y bebida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina/Salón' },
+            { id: 13, day: 'Martes', time: '08:00 - 09:00', task: 'Desayunar', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 14, day: 'Martes', time: '09:00 - 13:00', task: 'Estudiar Programación', category: 'Estudios', type: 'Fijo', completed: false, location: 'Escritorio' },
+            { id: 15, day: 'Martes', time: '10:00 - 11:00', task: 'Hacer la cama', category: 'Limpieza', type: 'Fijo', completed: false, location: 'Habitación' },
+            { id: 16, day: 'Martes', time: '11:00 - 12:00', task: 'Lavamanos, espejo y bidet', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Baño' },
+            { id: 17, day: 'Martes', time: '12:30 - 13:30', task: 'Hacer la comida', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 18, day: 'Martes', time: '14:00 - 15:00', task: 'Comida y limpieza cacharros', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 19, day: 'Martes', time: 'Flexible', task: 'Ropa sucia lavar, tender', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Solana' },
+            { id: 20, day: 'Martes', time: '21:30 - 22:30', task: 'Comida y bebida (Noche)', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+
+            // MIÉRCOLES
+            { id: 21, day: 'Miércoles', time: '07:00', task: 'Comida y bebida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 22, day: 'Miércoles', time: '08:00 - 13:00', task: 'Estudios Generales / Trabajos', category: 'Estudios', type: 'Fijo', completed: false, location: 'Escritorio' },
+            { id: 23, day: 'Miércoles', time: '10:00 - 11:00', task: 'Hacer la cama y recoger ropa', category: 'Limpieza', type: 'Fijo', completed: false, location: 'Habitación' },
+            { id: 24, day: 'Miércoles', time: '12:30 - 13:30', task: 'Hacer la comida', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 25, day: 'Miércoles', time: '14:00 - 15:00', task: 'Comida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 26, day: 'Miércoles', time: 'Flexible', task: 'Limpiar cristales y mesita', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Solana' },
+            { id: 27, day: 'Miércoles', time: '21:30 - 22:30', task: 'Comida Tiger Noche', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+
+            // JUEVES
+            { id: 28, day: 'Jueves', time: '07:00', task: 'Comida y bebida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 29, day: 'Jueves', time: '08:00 - 13:00', task: 'Estudios: Redes', category: 'Estudios', type: 'Fijo', completed: false, location: 'Escritorio' },
+            { id: 30, day: 'Jueves', time: '10:00 - 12:00', task: 'Limpieza profunda Baño', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Baño' },
+            { id: 31, day: 'Jueves', time: '12:30 - 13:30', task: 'Hacer la comida', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 32, day: 'Jueves', time: '14:00 - 15:00', task: 'Comida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 33, day: 'Jueves', time: '21:30 - 22:30', task: 'Comida Tiger Noche', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+
+            // VIERNES
+            { id: 34, day: 'Viernes', time: '07:00', task: 'Comida y bebida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 35, day: 'Viernes', time: '08:00 - 13:00', task: 'Estudios y Repaso', category: 'Estudios', type: 'Fijo', completed: false, location: 'Escritorio' },
+            { id: 36, day: 'Viernes', time: '10:00 - 11:00', task: 'Hacer la cama', category: 'Limpieza', type: 'Fijo', completed: false, location: 'Habitación' },
+            { id: 37, day: 'Viernes', time: '12:30 - 13:30', task: 'Hacer la comida', category: 'Comida', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 38, day: 'Viernes', time: '14:00 - 15:00', task: 'Comida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 39, day: 'Viernes', time: 'Flexible', task: 'Limpiar estanterías y router', category: 'Limpieza', type: 'Flexible', completed: false, location: 'Salón' },
+            { id: 40, day: 'Viernes', time: '21:30 - 22:30', task: 'Comida Tiger Noche', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+
+            // FIN DE SEMANA
+            { id: 41, day: 'Sábado', time: '09:00 - 11:00', task: 'Hacer la compra', category: 'Comida', type: 'Fijo', completed: false, location: 'Fuera' },
+            { id: 42, day: 'Sábado', time: 'Flexible', task: 'Limpieza general objetos/superficies', category: 'Limpieza', type: 'Flexible', completed: false, location: 'General' },
+            { id: 43, day: 'Sábado', time: '14:00 - 15:00', task: 'Comida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 44, day: 'Sábado', time: '21:30 - 22:30', task: 'Comida Tiger Noche', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 45, day: 'Domingo', time: 'Flexible', task: 'Día de descanso general', category: 'Estudios', type: 'Flexible', completed: false, location: 'Casa' },
+            { id: 46, day: 'Domingo', time: '14:00 - 15:00', task: 'Comida Tiger', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' },
+            { id: 47, day: 'Domingo', time: '21:30 - 22:30', task: 'Comida Tiger Noche', category: 'Mascota', type: 'Fijo', completed: false, location: 'Cocina' }
+        ];
+
+        let chartCategoryInstance = null;
+        let chartDayInstance = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const taskListElement = document.getElementById('taskList');
+            // Mensaje mientras se descargan los datos
+            taskListElement.innerHTML = '<li class="p-8 text-center text-stone-500 flex flex-col items-center gap-3"><span class="text-3xl animate-spin">⏳</span><span>Sincronizando con Google Sheets...</span></li>';
+
+            // Descargar estado desde Google Sheets
+            fetch(API_URL)
+                .then(response => response.json())
+                .then(savedData => {
+                    scheduleData.forEach(task => {
+                        if (savedData[task.id] !== undefined) {
+                            task.completed = savedData[task.id];
+                        }
+                    });
+                    
+                    initCharts();
+                    renderTaskList();
+                })
+                .catch(error => {
+                    console.error("Error cargando datos:", error);
+                    taskListElement.innerHTML = '<li class="p-4 text-center text-red-500">Error conectando a la base de datos. Se usará el estado por defecto.</li>';
+                    setTimeout(() => {
+                        initCharts();
+                        renderTaskList();
+                    }, 2000);
+                });
+            
+            // Event Listeners for Filters
+            document.getElementById('dayFilter').addEventListener('change', renderTaskList);
+            document.getElementById('categoryFilter').addEventListener('change', renderTaskList);
+        });
+
+        function renderTaskList() {
+            const dayFilterVal = document.getElementById('dayFilter').value;
+            const catFilterVal = document.getElementById('categoryFilter').value;
+            const taskListElement = document.getElementById('taskList');
+            const emptyStateElement = document.getElementById('emptyState');
+
+            const filteredTasks = scheduleData.filter(task => {
+                const matchDay = dayFilterVal === 'Todos' || task.day === dayFilterVal;
+                const matchCat = catFilterVal === 'Todas' || task.category === catFilterVal;
+                return matchDay && matchCat;
+            });
+
+            taskListElement.innerHTML = '';
+
+            if (filteredTasks.length === 0) {
+                taskListElement.classList.add('hidden');
+                emptyStateElement.classList.remove('hidden');
+            } else {
+                taskListElement.classList.remove('hidden');
+                emptyStateElement.classList.add('hidden');
+
+                filteredTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    
+                    const borderClass = task.type === 'Fijo' ? 'task-fijo' : 'task-flexible';
+                    const textStrikeClass = task.completed ? 'line-through text-stone-400' : 'text-stone-800';
+                    const bgClass = task.completed ? 'bg-stone-50' : 'bg-white hover:bg-stone-50 transition-colors';
+                    const timeBadgeClass = task.type === 'Fijo' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800';
+
+                    li.className = `p-4 border-b border-stone-100 last:border-0 flex items-start gap-4 ${bgClass}`;
+                    
+                    li.innerHTML = `
+                        <div class="mt-1">
+                            <input type="checkbox" 
+                                   class="custom-checkbox" 
+                                   id="task-${task.id}" 
+                                   ${task.completed ? 'checked' : ''} 
+                                   onchange="toggleTask(${task.id})">
+                        </div>
+                        <div class="flex-grow flex flex-col sm:flex-row sm:items-center justify-between gap-2 pl-3 ${borderClass}">
+                            <div>
+                                <label for="task-${task.id}" class="font-medium text-lg cursor-pointer ${textStrikeClass} block">
+                                    ${task.task}
+                                </label>
+                                <div class="flex items-center gap-3 mt-1 text-sm text-stone-500">
+                                    <span class="flex items-center gap-1">🏷️ ${task.category}</span>
+                                    <span class="flex items-center gap-1">📍 ${task.location}</span>
+                                    ${dayFilterVal === 'Todos' ? `<span class="bg-stone-200 text-stone-700 px-2 py-0.5 rounded text-xs">${task.day}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <span class="inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${timeBadgeClass}">
+                                    ⏱️ ${task.time}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                    taskListElement.appendChild(li);
+                });
+            }
+
+            updateProgressBar();
+        }
+
+        function toggleTask(id) {
+            const taskIndex = scheduleData.findIndex(t => t.id === id);
+            if (taskIndex > -1) {
+                // Actualiza visualmente de inmediato
+                scheduleData[taskIndex].completed = !scheduleData[taskIndex].completed;
+                
+                // Extraemos todos los datos de esa tarea concreta
+                const isCompleted = scheduleData[taskIndex].completed;
+                const taskDay = scheduleData[taskIndex].day;
+                const taskName = scheduleData[taskIndex].task;
+                const taskCat = scheduleData[taskIndex].category;
+                
+                renderTaskList(); 
+
+                // Enviamos TODOS los datos a Google Sheets
+                fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ 
+                        id: id, 
+                        completed: isCompleted,
+                        day: taskDay,
+                        task: taskName,
+                        category: taskCat
+                    })
+                })
+                .then(response => response.json())
+                .then(data => console.log("¡Tarea guardada con detalles en Excel!", data))
+                .catch(error => console.error("Error al guardar:", error));
+            }
+        }
+
+        function updateProgressBar() {
+            const dayFilterVal = document.getElementById('dayFilter').value;
+            
+            const relevantTasks = scheduleData.filter(task => {
+                return dayFilterVal === 'Todos' || task.day === dayFilterVal;
+            });
+
+            const total = relevantTasks.length;
+            const completed = relevantTasks.filter(t => t.completed).length;
+            const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+            const progressBar = document.getElementById('global-progress-bar');
+            const progressText = document.getElementById('global-progress-text');
+
+            progressBar.style.width = `${percentage}%`;
+            
+            if(dayFilterVal === 'Todos') {
+                progressText.innerText = `${percentage}% Completado en la Semana`;
+            } else {
+                progressText.innerText = `${percentage}% Completado el ${dayFilterVal}`;
+            }
+
+            if (percentage === 100) {
+                progressBar.classList.remove('bg-emerald-500');
+                progressBar.classList.add('bg-blue-600');
+            } else {
+                progressBar.classList.remove('bg-blue-600');
+                progressBar.classList.add('bg-emerald-500');
+            }
+        }
+
+        function initCharts() {
+            const categories = {};
+            scheduleData.forEach(task => {
+                categories[task.category] = (categories[task.category] || 0) + 1;
+            });
+
+            const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+            const fijosPerDay = Array(7).fill(0);
+            const flexiblesPerDay = Array(7).fill(0);
+
+            scheduleData.forEach(task => {
+                const dayIndex = days.indexOf(task.day);
+                if (dayIndex !== -1) {
+                    if (task.type === 'Fijo') fijosPerDay[dayIndex]++;
+                    else flexiblesPerDay[dayIndex]++;
+                }
+            });
+
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false, 
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { font: { family: "'Segoe UI', sans-serif" }, padding: 20 }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(41, 37, 36, 0.9)', 
+                        titleFont: { size: 14, family: "'Segoe UI', sans-serif" },
+                        bodyFont: { size: 13, family: "'Segoe UI', sans-serif" },
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed.y !== null) { label += context.parsed.y; }
+                                else { label += context.parsed; }
+                                return label + ' tareas';
+                            }
+                        }
+                    }
+                }
+            };
+
+            const ctxCat = document.getElementById('categoryChart').getContext('2d');
+            chartCategoryInstance = new Chart(ctxCat, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(categories),
+                    datasets: [{
+                        data: Object.values(categories),
+                        backgroundColor: ['#f97316', '#3b82f6', '#10b981', '#eab308'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    cutout: '65%'
+                }
+            });
+
+            const ctxDay = document.getElementById('dayChart').getContext('2d');
+            chartDayInstance = new Chart(ctxDay, {
+                type: 'bar',
+                data: {
+                    labels: days,
+                    datasets: [
+                        { label: 'Tareas Fijas', data: fijosPerDay, backgroundColor: '#3b82f6', borderRadius: 4 },
+                        { label: 'Tareas Flexibles', data: flexiblesPerDay, backgroundColor: '#f97316', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        x: { stacked: true, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true, grid: { color: '#f5f5f4' } } 
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
